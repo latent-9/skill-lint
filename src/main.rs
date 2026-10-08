@@ -168,9 +168,11 @@ fn watch_mode(reports: &[SkillReport], args: &Args) -> ExitCode {
                         let fp = path.join(file);
                         if let Ok(meta) = std::fs::metadata(&fp) {
                             if let Ok(modified) = meta.modified() {
-                                if modified.elapsed().as_secs() < 2 {
-                                    changed = true;
-                                    break;
+                                if let Ok(elapsed) = modified.elapsed() {
+                                    if elapsed.as_secs() < 2 {
+                                        changed = true;
+                                        break;
+                                    }
                                 }
                             }
                         }
