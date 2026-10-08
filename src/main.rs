@@ -18,6 +18,10 @@ struct Args {
     #[argh(switch)]
     strict: bool,
 
+    /// emit SARIF output for GitHub code scanning
+    #[argh(switch)]
+    sarif: bool,
+
     /// the skill folder to lint (or the repo root with --repo)
     #[argh(positional)]
     path: Option<PathBuf>,
@@ -40,7 +44,9 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
 
-    if args.json {
+    if args.sarif {
+        print_sarif(&reports);
+    } else if args.json {
         print_json(&reports);
     } else {
         for report in &reports {
@@ -107,6 +113,47 @@ fn print_summary(reports: &[SkillReport]) {
         reports.len(), valid, invalid, total_errors, total_warnings);
     println!("  grades: A={} B={} C={} D={} F={}",
         grades[0], grades[1], grades[2], grades[3], grades[4]);
+}
+
+fn print_sarif(reports: &[SkillReport]) {
+    use serde_json::json;
+    let results: Vec<serde_json::Value> = reports
+        .iter()
+        .flat_map(|r| {
+            r.findings.iter().map(|f| {
+                json!({
+                    "ruleId": f.check,
+                    "level": match f.severity {
+                        Severity::Error => "error",
+                        Severity::Warning => "warning",
+                        Severity::Info => "note",
+                    },
+                    "message": { "text": f.message },
+                    "locations": [{
+                        "physicalLocation": {
+                            "artifactLocation": { "uri": r.path.display().to_string() }
+                        }
+                    }]
+                })
+            })
+        })
+        .collect();
+
+    let sarif = json!({
+        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name": "skill-lint",
+                    "informationUri": "https://github.com/latent-9/skill-lint",
+                    "version": "0.1.0"
+                }
+            },
+            "results": results
+        }]
+    });
+    println!("{}", serde_json::to_string_pretty(&sarif).unwrap());
 }
 
 fn print_json(reports: &[SkillReport]) {
