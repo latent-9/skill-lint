@@ -147,13 +147,13 @@ fn scan_text(origin: &str, text: &str, findings: &mut Vec<Finding>) {
             ));
         }
     }
-    if lower.contains("| sh") || lower.contains("| bash") || lower.contains("|sh") || lower.contains("|bash") {
-        if lower.contains("curl") || lower.contains("wget") {
-            findings.push(Finding::error(
-                "dangerous_command",
-                format!("{origin}: pipes a remote script into a shell"),
-            ));
-        }
+    if (lower.contains("| sh") || lower.contains("| bash") || lower.contains("|sh") || lower.contains("|bash"))
+        && (lower.contains("curl") || lower.contains("wget"))
+    {
+        findings.push(Finding::error(
+            "dangerous_command",
+            format!("{origin}: pipes a remote script into a shell"),
+        ));
     }
     if lower.contains("chmod -r 777") {
         findings.push(Finding::warning(
