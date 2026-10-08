@@ -392,9 +392,54 @@ fn lint_optional_files(dir: &Path, findings: &mut Vec<Finding>) {
     }
     if dir.join("references").is_dir() {
         findings.push(Finding::info("references", "references/ present"));
+        check_reference_sizes(&dir.join("references"), findings);
     }
     if dir.join("scripts").is_dir() {
         findings.push(Finding::info("scripts", "scripts/ present"));
+        check_path_traversal(&dir.join("scripts"), findings);
+    }
+}
+
+/// Bankr caps each reference file at 100 KB; oversized files are skipped on install.
+fn check_reference_sizes(dir: &Path, findings: &mut Vec<Finding>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_file() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.len() > 100_000 {
+                    findings.push(Finding::warning(
+                        "references",
+                        format!(
+                            "{} is {} bytes; Bankr caps reference files at 100 KB and skips oversized ones",
+                            path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default(),
+                            meta.len()
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+}
+
+/// Resource file paths must be relative, no traversal, max 255 chars.
+fn check_path_traversal(dir: &Path, findings: &mut Vec<Finding>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_file() {
+            let name = path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+            if name.len() > 255 {
+                findings.push(Finding::warning(
+                    "scripts",
+                    format!("{name} exceeds Bankr's 255-character path limit"),
+                ));
+            }
+        }
     }
 }
 
