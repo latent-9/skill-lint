@@ -247,9 +247,15 @@ fn fix_skill(report: &SkillReport) {
     }
 
     if changed {
-        let pretty = serde_json::to_string_pretty(&catalog).unwrap();
-        if std::fs::write(&catalog_path, pretty).is_ok() {
-            println!("  wrote: {}", catalog_path.display());
+        match serde_json::to_string_pretty(&catalog) {
+            Ok(pretty) => {
+                if let Err(err) = std::fs::write(&catalog_path, pretty) {
+                    eprintln!("  [!] cannot write {}: {err}", catalog_path.display());
+                } else {
+                    println!("  wrote: {}", catalog_path.display());
+                }
+            }
+            Err(err) => eprintln!("  [!] cannot serialize catalog: {err}"),
         }
     }
 }
@@ -331,7 +337,10 @@ fn print_sarif(reports: &[SkillReport]) {
             "results": results
         }]
     });
-    println!("{}", serde_json::to_string_pretty(&sarif).unwrap());
+    match serde_json::to_string_pretty(&sarif) {
+        Ok(json) => println!("{json}"),
+        Err(err) => eprintln!("cannot serialize SARIF: {err}"),
+    }
 }
 
 fn print_json(reports: &[SkillReport]) {
@@ -340,7 +349,10 @@ fn print_json(reports: &[SkillReport]) {
         if i > 0 {
             out.push(',');
         }
-        out.push_str(&serde_json::to_string(&json_report(report)).unwrap());
+    match serde_json::to_string(&json_report(report)) {
+        Ok(json) => out.push_str(&json),
+        Err(err) => eprintln!("cannot serialize report: {err}"),
+    }
     }
     out.push(']');
     println!("{out}");
