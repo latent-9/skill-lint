@@ -1,0 +1,17 @@
+[package]
+name = "skill-lint"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Linter for Bankr agent skills: validates catalog.json and SKILL.md against the BankrBot/skills catalog spec."
+repository = "https://github.com/Souna-Research/skill-lint"
+readme = "README.md"
+keywords = ["bankr", "skills", "linter", "agent", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+argh = "0.1"
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
