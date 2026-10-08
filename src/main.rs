@@ -20,15 +20,19 @@ struct Args {
 
     /// the skill folder to lint (or the repo root with --repo)
     #[argh(positional)]
-    path: PathBuf,
+    path: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
     let args: Args = argh::from_env();
 
+    let default_path = PathBuf::from(".");
     let reports: Vec<SkillReport> = match &args.repo {
         Some(root) => lint_repo(root),
-        None => vec![lint_skill(&args.path)],
+        None => {
+            let path = args.path.as_ref().unwrap_or(&default_path);
+            vec![lint_skill(path)]
+        }
     };
 
     if reports.is_empty() {
@@ -42,6 +46,7 @@ fn main() -> ExitCode {
         for report in &reports {
             print_report(report);
         }
+        print_summary(&reports);
     }
 
     let failed = reports.iter().any(|r| {
@@ -63,7 +68,9 @@ fn print_report(report: &SkillReport) {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| report.path.display().to_string());
     let status = if report.is_valid() { "OK" } else { "INVALID" };
-    println!("{}: {status}", name);
+    let error_count = report.errors().count();
+    let warn_count = report.warnings().count();
+    println!("{}: {status} ({error_count} errors, {warn_count} warnings)", name);
     for f in &report.findings {
         let icon = match f.severity {
             Severity::Error => "x",
@@ -73,6 +80,18 @@ fn print_report(report: &SkillReport) {
         println!("  [{icon}] {}: {}", f.check, f.message);
     }
     println!();
+}
+
+fn print_summary(reports: &[SkillReport]) {
+    if reports.len() < 2 {
+        return;
+    }
+    let valid = reports.iter().filter(|r| r.is_valid()).count();
+    let invalid = reports.len() - valid;
+    let total_errors: usize = reports.iter().map(|r| r.errors().count()).sum();
+    let total_warnings: usize = reports.iter().map(|r| r.warnings().count()).sum();
+    println!("--- {} skills: {} valid, {} invalid, {} errors, {} warnings ---",
+        reports.len(), valid, invalid, total_errors, total_warnings);
 }
 
 fn print_json(reports: &[SkillReport]) {
