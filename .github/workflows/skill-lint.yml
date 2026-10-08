@@ -1,0 +1,36 @@
+# .github/workflows/skill-lint.yml
+# Drop this into a Bankr skills repo to auto-lint every PR.
+# Requires: cargo install --git https://github.com/latent-9/skill-lint
+
+name: skill-lint
+
+on:
+  pull_request:
+    paths:
+      - "**/SKILL.md"
+      - "**/catalog.json"
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install skill-lint
+        run: cargo install --git https://github.com/latent-9/skill-lint
+
+      - name: Lint all skills
+        run: skill-lint --repo .
+
+      - name: Lint (JSON report)
+        if: always()
+        run: skill-lint --repo . --json > skill-lint-report.json
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-lint-report
+          path: skill-lint-report.json
