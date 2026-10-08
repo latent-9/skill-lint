@@ -187,6 +187,29 @@ fn lint_install(catalog: &Value, folder_name: &str, findings: &mut Vec<Finding>)
         findings.push(Finding::error("install", "install is required"));
         return;
     };
+
+    // Legacy format: install is a plain command string instead of an object.
+    if let Some(cmd) = install.as_str() {
+        findings.push(Finding::warning(
+            "install",
+            format!(
+                "install is a plain string ({cmd:?}); the spec expects an object with \
+                 \"type\", and \"repoPath\"+\"command\" or \"provider\"+\"command\""
+            ),
+        ));
+        return;
+    }
+
+    let Some(install) = install.as_object() else {
+        findings.push(Finding::error(
+            "install",
+            format!("install must be an object or a command string, found {install}"),
+        ));
+        return;
+    };
+    let catalog = Value::Object(install.clone());
+    let install = &catalog;
+
     let Some(install_type) = install.get("type").and_then(Value::as_str) else {
         findings.push(Finding::error("install", "install.type is required"));
         return;
