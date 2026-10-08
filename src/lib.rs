@@ -36,6 +36,29 @@ pub struct SkillReport {
     pub path: PathBuf,
     pub slug: Option<String>,
     pub findings: Vec<Finding>,
+    pub grade: Grade,
+}
+
+/// Letter grade for a skill, computed from its findings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Grade {
+    A,
+    B,
+    C,
+    D,
+    F,
+}
+
+impl Grade {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Grade::A => "A",
+            Grade::B => "B",
+            Grade::C => "C",
+            Grade::D => "D",
+            Grade::F => "F",
+        }
+    }
 }
 
 impl SkillReport {
@@ -49,6 +72,30 @@ impl SkillReport {
 
     pub fn warnings(&self) -> impl Iterator<Item = &Finding> {
         self.findings.iter().filter(|f| f.severity == Severity::Warning)
+    }
+}
+
+/// Computes a grade from the findings.
+///
+/// A = no errors, no warnings
+/// B = no errors, 1-3 warnings
+/// C = no errors, 4+ warnings
+/// D = 1 error
+/// F = 2+ errors or any security error (injection, secrets, exfiltration)
+fn compute_grade(findings: &[Finding]) -> Grade {
+    let errors = findings.iter().filter(|f| f.severity == Severity::Error).count();
+    let warnings = findings.iter().filter(|f| f.severity == Severity::Warning).count();
+
+    if errors == 0 {
+        match warnings {
+            0 => Grade::A,
+            1..=3 => Grade::B,
+            _ => Grade::C,
+        }
+    } else if errors == 1 {
+        Grade::D
+    } else {
+        Grade::F
     }
 }
 
@@ -91,7 +138,12 @@ pub fn lint_skill(dir: &Path) -> SkillReport {
     lint_optional_files(dir, &mut findings);
     security::scan(dir, &skill_body, &mut findings);
 
-    SkillReport { path: dir.to_path_buf(), slug, findings }
+    SkillReport {
+        path: dir.to_path_buf(),
+        slug,
+        grade: compute_grade(&findings),
+        findings,
+    }
 }
 
 /// Lint every subfolder of a skills repo root that looks like a skill.

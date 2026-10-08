@@ -1,5 +1,5 @@
 use {
-    skill_lint::{lint_repo, lint_skill, Severity, SkillReport},
+    skill_lint::{lint_repo, lint_skill, Grade, Severity, SkillReport},
     std::{path::PathBuf, process::ExitCode},
 };
 
@@ -70,7 +70,7 @@ fn print_report(report: &SkillReport) {
     let status = if report.is_valid() { "OK" } else { "INVALID" };
     let error_count = report.errors().count();
     let warn_count = report.warnings().count();
-    println!("{}: {status} ({error_count} errors, {warn_count} warnings)", name);
+    println!("{}: [{}] {status} ({error_count} errors, {warn_count} warnings)", name, report.grade.as_str());
     for f in &report.findings {
         let icon = match f.severity {
             Severity::Error => "x",
@@ -90,8 +90,23 @@ fn print_summary(reports: &[SkillReport]) {
     let invalid = reports.len() - valid;
     let total_errors: usize = reports.iter().map(|r| r.errors().count()).sum();
     let total_warnings: usize = reports.iter().map(|r| r.warnings().count()).sum();
+
+    let mut grades = [0usize; 5]; // A B C D F
+    for r in reports {
+        let idx = match r.grade {
+            Grade::A => 0,
+            Grade::B => 1,
+            Grade::C => 2,
+            Grade::D => 3,
+            Grade::F => 4,
+        };
+        grades[idx] += 1;
+    }
+
     println!("--- {} skills: {} valid, {} invalid, {} errors, {} warnings ---",
         reports.len(), valid, invalid, total_errors, total_warnings);
+    println!("  grades: A={} B={} C={} D={} F={}",
+        grades[0], grades[1], grades[2], grades[3], grades[4]);
 }
 
 fn print_json(reports: &[SkillReport]) {
@@ -112,6 +127,7 @@ fn json_report(report: &SkillReport) -> serde_json::Value {
         "path": report.path.display().to_string(),
         "slug": report.slug,
         "valid": report.is_valid(),
+        "grade": report.grade.as_str(),
         "findings": report.findings.iter().map(|f| json!({
             "severity": match f.severity {
                 Severity::Error => "error",
