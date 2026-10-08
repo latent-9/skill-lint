@@ -338,7 +338,7 @@ fn lint_skill_md(source: &str, folder_name: &str, findings: &mut Vec<Finding>) -
     // Optional fields per the Bankr spec
     if let Some(tags) = lookup("tags") {
         if tags.starts_with('[') && tags.ends_with(']') {
-            findings.push(Finding::info("tags", format!("tags: {tags}"));
+            findings.push(Finding::info("tags", format!("tags: {tags}")));
         }
     }
     if let Some(vis) = lookup("visibility") {
@@ -470,15 +470,16 @@ mod tests {
     }
 
     #[test]
-    fn missing_frontmatter_is_an_error() {
+    fn missing_frontmatter_warns_but_passes() {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path().join("my-skill");
         fs::create_dir_all(&dir).unwrap();
         write_skill(&dir, VALID_CATALOG, "# no frontmatter here\n");
 
         let report = lint_skill(&dir);
-        assert!(!report.is_valid());
-        assert!(report.errors().any(|f| f.check == "frontmatter"));
+        // Bankr accepts frontmatter-less skills (synthesizes name/description)
+        assert!(report.is_valid());
+        assert!(report.warnings().any(|f| f.check == "frontmatter"));
     }
 
     #[test]
