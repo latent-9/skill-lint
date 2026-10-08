@@ -159,20 +159,18 @@ fn fix_skill(report: &SkillReport) {
     }
 
     // Fix legacy install-as-string
-    if let Some(install) = catalog.get("install") {
-        if let Some(cmd) = install.as_str() {
-            let folder = report.path.file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            if let Some(obj) = catalog.as_object_mut() {
-                obj.insert("install".into(), serde_json::json!({
-                    "type": "bankr",
-                    "repoPath": folder,
-                    "command": cmd
-                }));
-                changed = true;
-                println!("  fixed: converted install string to object");
-            }
+    if let Some(install_str) = catalog.get("install").and_then(|v| v.as_str()).map(String::from) {
+        let folder = report.path.file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if let Some(obj) = catalog.as_object_mut() {
+            obj.insert("install".into(), serde_json::json!({
+                "type": "bankr",
+                "repoPath": folder,
+                "command": install_str
+            }));
+            changed = true;
+            println!("  fixed: converted install string to object");
         }
     }
 
