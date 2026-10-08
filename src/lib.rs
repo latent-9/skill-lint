@@ -273,11 +273,17 @@ fn lint_install(catalog: &Value, folder_name: &str, findings: &mut Vec<Finding>)
 /// security scan.
 fn lint_skill_md(source: &str, folder_name: &str, findings: &mut Vec<Finding>) -> String {
     let Some(front) = frontmatter::parse(source) else {
-        findings.push(Finding::error(
+        // Bankr accepts frontmatter-less skills: it synthesizes name from
+        // the first heading and description from the first prose paragraph.
+        // Warn, but don't error.
+        findings.push(Finding::warning(
             "frontmatter",
-            format!("{SKILL_MD} must begin with a YAML frontmatter block delimited by ---"),
+            format!(
+                "{SKILL_MD} has no YAML frontmatter; Bankr will synthesize name/description \
+                 from the body, but explicit frontmatter is recommended"
+            ),
         ));
-        return String::new();
+        return source.to_owned();
     };
 
     let lookup = |key: &str| front.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
@@ -329,6 +335,29 @@ fn lint_skill_md(source: &str, folder_name: &str, findings: &mut Vec<Finding>) -
         }
     }
 
+    // Optional fields per the Bankr spec
+    if let Some(tags) = lookup("tags") {
+        if tags.starts_with('[') && tags.ends_with(']') {
+            findings.push(Finding::info("tags", format!("tags: {tags}"));
+        }
+    }
+    if let Some(vis) = lookup("visibility") {
+        if vis != "private" && vis != "public" {
+            findings.push(Finding::warning(
+                "visibility",
+                format!("visibility must be \"private\" or \"public\", found {vis:?}"),
+            ));
+        }
+    }
+    if let Some(version) = lookup("version") {
+        if version.parse::<u32>().is_err() {
+            findings.push(Finding::warning(
+                "version",
+                format!("version should be a number, found {version:?}"),
+            ));
+        }
+    }
+
     let body = frontmatter::body(source).to_owned();
     if body.trim().len() < 100 {
         findings.push(Finding::warning(
@@ -336,12 +365,20 @@ fn lint_skill_md(source: &str, folder_name: &str, findings: &mut Vec<Finding>) -
             "SKILL.md has almost no instructions after the frontmatter",
         ));
     }
-    if source.len() > 150_000 {
+
+    // Bankr caps SKILL.md at 1 MB
+    if source.len() > 1_000_000 {
+        findings.push(Finding::error(
+            "skill_md",
+            "SKILL.md exceeds Bankr's 1 MB limit; the install will fail",
+        ));
+    } else if source.len() > 150_000 {
         findings.push(Finding::warning(
             "skill_md",
             "SKILL.md is oversized; large skills waste agent context",
         ));
     }
+
     body
 }
 
