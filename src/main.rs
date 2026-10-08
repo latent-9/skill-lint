@@ -30,6 +30,10 @@ struct Args {
     #[argh(switch)]
     fix: bool,
 
+    /// watch for file changes and re-lint
+    #[argh(switch)]
+    watch: bool,
+
     /// the skill folder to lint (or the repo root with --repo)
     #[argh(positional)]
     path: Option<PathBuf>,
@@ -57,6 +61,11 @@ fn main() -> ExitCode {
         for report in &reports {
             fix_skill(report);
         }
+    }
+
+    // Watch mode: re-lint on file change
+    if args.watch {
+        return watch_mode(&reports, &args);
     }
 
     // Check for duplicate slugs against the live catalog
@@ -138,6 +147,54 @@ fn print_summary(reports: &[SkillReport]) {
 /// Auto-fixes common issues in a skill's catalog.json:
 /// - Adds missing schemaVersion: 1
 /// - Converts legacy install-as-string to install-as-object
+fn watch_mode(reports: &[SkillReport], args: &Args) -> ExitCode {
+    let root = args.repo.clone().unwrap_or_else(|| {
+        args.path.clone().unwrap_or_else(|| PathBuf::from("."))
+    });
+
+    println!("watching {} for changes (Ctrl+C to stop)...", root.display());
+    let mut last_run = std::time::Instant::now();
+
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        // Check if any skill file changed since last lint
+        let mut changed = false;
+        if let Ok(entries) = std::fs::read_dir(&root) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_dir() {
+                    for file in ["SKILL.md", "catalog.json"] {
+                        let fp = path.join(file);
+                        if let Ok(meta) = std::fs::metadata(&fp) {
+                            if let Ok(modified) = meta.modified() {
+                                if modified.elapsed().as_secs() < 2 {
+                                    changed = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                if changed { break; }
+            }
+        }
+
+        if changed && last_run.elapsed().as_secs() >= 2 {
+            println!("\n--- re-linting ---");
+            let fresh = match &args.repo {
+                Some(r) => lint_repo(r),
+                None => vec![lint_skill(&root)],
+            };
+            for report in &fresh {
+                print_report(report);
+            }
+            print_summary(&fresh);
+            last_run = std::time::Instant::now();
+        }
+    }
+}
+
 fn fix_skill(report: &SkillReport) {
     let catalog_path = report.path.join("catalog.json");
     let Ok(source) = std::fs::read_to_string(&catalog_path) else {
