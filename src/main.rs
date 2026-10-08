@@ -22,6 +22,10 @@ struct Args {
     #[argh(switch)]
     sarif: bool,
 
+    /// check for duplicate slugs against the live BankrBot/skills catalog
+    #[argh(switch)]
+    check_catalog: bool,
+
     /// the skill folder to lint (or the repo root with --repo)
     #[argh(positional)]
     path: Option<PathBuf>,
@@ -42,6 +46,11 @@ fn main() -> ExitCode {
     if reports.is_empty() {
         eprintln!("no skill folders found");
         return ExitCode::from(2);
+    }
+
+    // Check for duplicate slugs against the live catalog
+    if args.check_catalog {
+        check_duplicate_slugs(&reports);
     }
 
     if args.sarif {
@@ -113,6 +122,45 @@ fn print_summary(reports: &[SkillReport]) {
         reports.len(), valid, invalid, total_errors, total_warnings);
     println!("  grades: A={} B={} C={} D={} F={}",
         grades[0], grades[1], grades[2], grades[3], grades[4]);
+}
+
+fn check_duplicate_slugs(reports: &[SkillReport]) {
+    // Fetch the live catalog listing
+    let Ok(output) = std::process::Command::new("curl")
+        .args(["-s", "https://api.github.com/repos/BankrBot/skills/contents/"])
+        .output()
+    else {
+        eprintln!("  [!] catalog: cannot reach GitHub API to check for duplicate slugs");
+        return;
+    };
+
+    let Ok(listing) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
+        eprintln!("  [!] catalog: cannot parse GitHub API response");
+        return;
+    };
+
+    let Some(entries) = listing.as_array() else {
+        eprintln!("  [!] catalog: unexpected API response format");
+        return;
+    };
+
+    let existing: std::collections::HashSet<String> = entries
+        .iter()
+        .filter_map(|e| e.get("name").and_then(|n| n.as_str()).map(String::from))
+        .collect();
+
+    println!("--- catalog check: {} existing skills ---", existing.len());
+    for report in reports {
+        if let Some(slug) = &report.slug {
+            if existing.contains(slug) {
+                eprintln!(
+                    "  [!] {}: slug {:?} already exists in the BankrBot/skills catalog",
+                    report.path.display(),
+                    slug
+                );
+            }
+        }
+    }
 }
 
 fn print_sarif(reports: &[SkillReport]) {
