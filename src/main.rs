@@ -147,7 +147,7 @@ fn print_summary(reports: &[SkillReport]) {
 /// Auto-fixes common issues in a skill's catalog.json:
 /// - Adds missing schemaVersion: 1
 /// - Converts legacy install-as-string to install-as-object
-fn watch_mode(reports: &[SkillReport], args: &Args) -> ExitCode {
+fn watch_mode(_reports: &[SkillReport], args: &Args) -> ExitCode {
     let root = args.repo.clone().unwrap_or_else(|| {
         args.path.clone().unwrap_or_else(|| PathBuf::from("."))
     });
