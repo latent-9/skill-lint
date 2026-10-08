@@ -26,6 +26,10 @@ struct Args {
     #[argh(switch)]
     check_catalog: bool,
 
+    /// auto-fix fixable issues (missing schemaVersion, legacy install format)
+    #[argh(switch)]
+    fix: bool,
+
     /// the skill folder to lint (or the repo root with --repo)
     #[argh(positional)]
     path: Option<PathBuf>,
@@ -46,6 +50,13 @@ fn main() -> ExitCode {
     if reports.is_empty() {
         eprintln!("no skill folders found");
         return ExitCode::from(2);
+    }
+
+    // Auto-fix mode
+    if args.fix {
+        for report in &reports {
+            fix_skill(report);
+        }
     }
 
     // Check for duplicate slugs against the live catalog
@@ -122,6 +133,55 @@ fn print_summary(reports: &[SkillReport]) {
         reports.len(), valid, invalid, total_errors, total_warnings);
     println!("  grades: A={} B={} C={} D={} F={}",
         grades[0], grades[1], grades[2], grades[3], grades[4]);
+}
+
+/// Auto-fixes common issues in a skill's catalog.json:
+/// - Adds missing schemaVersion: 1
+/// - Converts legacy install-as-string to install-as-object
+fn fix_skill(report: &SkillReport) {
+    let catalog_path = report.path.join("catalog.json");
+    let Ok(source) = std::fs::read_to_string(&catalog_path) else {
+        return;
+    };
+    let Ok(mut catalog) = serde_json::from_str::<serde_json::Value>(&source) else {
+        return;
+    };
+
+    let mut changed = false;
+
+    // Fix missing schemaVersion
+    if catalog.get("schemaVersion").is_none() {
+        if let Some(obj) = catalog.as_object_mut() {
+            obj.insert("schemaVersion".into(), serde_json::json!(1));
+            changed = true;
+            println!("  fixed: added schemaVersion: 1");
+        }
+    }
+
+    // Fix legacy install-as-string
+    if let Some(install) = catalog.get("install") {
+        if let Some(cmd) = install.as_str() {
+            let folder = report.path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            if let Some(obj) = catalog.as_object_mut() {
+                obj.insert("install".into(), serde_json::json!({
+                    "type": "bankr",
+                    "repoPath": folder,
+                    "command": cmd
+                }));
+                changed = true;
+                println!("  fixed: converted install string to object");
+            }
+        }
+    }
+
+    if changed {
+        let pretty = serde_json::to_string_pretty(&catalog).unwrap();
+        if std::fs::write(&catalog_path, pretty).is_ok() {
+            println!("  wrote: {}", catalog_path.display());
+        }
+    }
 }
 
 fn check_duplicate_slugs(reports: &[SkillReport]) {
