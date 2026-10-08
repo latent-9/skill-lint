@@ -416,6 +416,8 @@ fn lint_skill_md(source: &str, folder_name: &str, findings: &mut Vec<Finding>) -
             "skill_md",
             "SKILL.md has almost no instructions after the frontmatter",
         ));
+    } else {
+        lint_body_quality(&body, findings);
     }
 
     // Bankr caps SKILL.md at 1 MB
@@ -432,6 +434,44 @@ fn lint_skill_md(source: &str, folder_name: &str, findings: &mut Vec<Finding>) -
     }
 
     body
+}
+
+/// Heuristics for instruction body quality: concrete instructions work
+/// better for agents than vague prose.
+fn lint_body_quality(body: &str, findings: &mut Vec<Finding>) {
+    let lower = body.to_lowercase();
+
+    // Concrete instructions use imperative language and specific commands
+    let has_code_blocks = body.contains("```");
+    let has_commands = lower.contains("run ") || lower.contains("execute ")
+        || lower.contains("call ") || lower.contains("install ")
+        || lower.contains("use ") || lower.contains("create ");
+    let has_specific = lower.contains("http") || lower.contains("api")
+        || lower.contains("cli") || lower.contains("command");
+
+    if !has_code_blocks && !has_commands {
+        findings.push(Finding::warning(
+            "body_quality",
+            "instruction body has no code blocks or actionable commands; \
+             agents perform better with concrete examples",
+        ));
+    }
+    if !has_specific {
+        findings.push(Finding::info(
+            "body_quality",
+            "instruction body lacks specific references (APIs, CLIs, URLs); \
+             concrete instructions reduce agent hallucination",
+        ));
+    }
+
+    // Check for relative references/ paths mentioned but not present
+    if lower.contains("references/") && !body.contains("see references/") && !body.contains("See references/") {
+        findings.push(Finding::info(
+            "body_quality",
+            "mentions references/ but doesn't explicitly link to them; \
+             use \"see references/file.md\" so the agent knows to fetch them",
+        ));
+    }
 }
 
 fn lint_optional_files(dir: &Path, findings: &mut Vec<Finding>) {
