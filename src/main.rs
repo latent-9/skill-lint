@@ -34,6 +34,10 @@ struct Args {
     #[argh(switch)]
     watch: bool,
 
+    /// print only the grade per skill, no details
+    #[argh(switch)]
+    score_only: bool,
+
     /// the skill folder to lint (or the repo root with --repo)
     #[argh(positional)]
     path: Option<PathBuf>,
@@ -75,6 +79,15 @@ fn main() -> ExitCode {
 
     if args.sarif {
         print_sarif(&reports);
+    } else if args.score_only {
+        for report in &reports {
+            let name = report
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            println!("{}: [{}]", name, report.grade.as_str());
+        }
     } else if args.json {
         print_json(&reports);
     } else {
