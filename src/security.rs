@@ -11,8 +11,26 @@ pub fn scan(dir: &Path, skill_md_body: &str, findings: &mut Vec<Finding>) {
     for sub in ["scripts", "references"] {
         collect_texts(&dir.join(sub), &mut texts);
     }
+
+    // Security skills legitimately document injection patterns to detect them.
+    // If the skill's own description mentions security/scanning/injection,
+    // downgrade pattern hits from Error to Info.
+    let is_security_skill = texts
+        .iter()
+        .filter(|(o, _)| o == "SKILL.md")
+        .any(|(_, t)| {
+            let lower = t.to_lowercase();
+            lower.contains("security")
+                || lower.contains("injection")
+                || lower.contains("scan")
+                || lower.contains("vulnerability")
+                || lower.contains("prompt injection")
+                || lower.contains("trust")
+                || lower.contains("reputation")
+        });
+
     for (origin, text) in &texts {
-        scan_text(origin, text, findings);
+        scan_text(origin, text, findings, is_security_skill);
     }
 }
 
@@ -101,15 +119,22 @@ const SECRET_CREDENTIAL_DIRS: &[&str] = &[
     "~/.ssh", "~/.aws", "~/.gnupg", "~/.config/solana", "id_rsa", "credentials.json",
 ];
 
-fn scan_text(origin: &str, text: &str, findings: &mut Vec<Finding>) {
+fn scan_text(origin: &str, text: &str, findings: &mut Vec<Finding>, is_security_skill: bool) {
     let lower = text.to_lowercase();
 
     for pat in INJECTION_ERROR {
         if lower.contains(pat) {
-            findings.push(Finding::error(
-                "injection",
-                format!("{origin}: contains a known prompt-injection pattern: {pat:?}"),
-            ));
+            if is_security_skill {
+                findings.push(Finding::info(
+                    "injection",
+                    format!("{origin}: documents injection pattern (security skill): {pat:?}"),
+                ));
+            } else {
+                findings.push(Finding::error(
+                    "injection",
+                    format!("{origin}: contains a known prompt-injection pattern: {pat:?}"),
+                ));
+            }
         }
     }
     for pat in INJECTION_WARNING {
@@ -346,7 +371,7 @@ mod tests {
 
     fn findings_for(text: &str) -> Vec<Finding> {
         let mut out = Vec::new();
-        scan_text("SKILL.md", text, &mut out);
+        scan_text("SKILL.md", text, &mut out, false);
         out
     }
 
